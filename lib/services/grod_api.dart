@@ -57,8 +57,14 @@ class GrodApi {
 
   void _check(http.Response res) {
     if (res.statusCode >= 400) {
-      final body = jsonDecode(res.body) as Map<String, dynamic>;
-      throw Exception(body['error'] ?? 'HTTP ${res.statusCode}');
+      String msg;
+      try {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        msg = body['error'] as String? ?? 'HTTP ${res.statusCode}';
+      } catch (_) {
+        msg = 'HTTP ${res.statusCode}';
+      }
+      throw Exception(msg);
     }
   }
 }

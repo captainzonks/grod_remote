@@ -69,14 +69,15 @@ class _SearchScreenState extends State<SearchScreen> {
     if (api == null) return;
     _ctrl.closeView(q);
     await _saveToHistory(q);
+    if (!mounted) return;
     setState(() { _searching = true; _error = null; _results = []; });
     try {
-      final results = await api.search(q);
-      setState(() => _results = results);
+      final results = await api.search(q).timeout(const Duration(seconds: 15));
+      if (mounted) setState(() => _results = results);
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e.toString());
     } finally {
-      setState(() => _searching = false);
+      if (mounted) setState(() => _searching = false);
     }
   }
 

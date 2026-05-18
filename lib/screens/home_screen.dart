@@ -85,26 +85,100 @@ class _NowPlayingCard extends StatelessWidget {
 
     final title = status?.nowPlaying?.title ?? (status?.state != DeviceState.idle ? 'Cast outside grod' : 'Nothing playing');
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 32),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
-                  Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
-                ],
-              ),
+    return Column(
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Icon(icon, color: color, size: 32),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+                      Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+                if (state.error != null)
+                  Icon(Icons.wifi_off, color: cs.error),
+              ],
             ),
-            if (state.error != null)
-              Icon(Icons.wifi_off, color: cs.error),
-          ],
+          ),
         ),
+        if (state.error != null) _ErrorBanner(error: state.error!),
+      ],
+    );
+  }
+}
+
+class _ErrorBanner extends StatelessWidget {
+  final String error;
+  const _ErrorBanner({required this.error});
+
+  String get _short {
+    if (error.contains('Connection refused') || error.contains('SocketException')) {
+      return 'Cannot reach server';
+    }
+    if (error.contains('401') || error.contains('Unauthorized')) {
+      return 'Wrong PIN';
+    }
+    if (error.contains('TimeoutException') || error.contains('timed out')) {
+      return 'Connection timed out';
+    }
+    // Strip "Exception:" prefix noise
+    return error.replaceFirst(RegExp(r'^[A-Za-z]+Exception:\s*'), '');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Material(
+        color: cs.errorContainer,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => _showFullError(context),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                Icon(Icons.wifi_off, size: 16, color: cs.onErrorContainer),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _short,
+                    style: TextStyle(color: cs.onErrorContainer, fontSize: 13),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Icon(Icons.info_outline, size: 16, color: cs.onErrorContainer),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showFullError(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Connection error'),
+        content: SingleChildScrollView(child: Text(error)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Dismiss'),
+          ),
+        ],
       ),
     );
   }
