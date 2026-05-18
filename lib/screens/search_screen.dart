@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../services/app_state.dart';
+
+const _historyKey = 'search_history';
+const _historyMax = 20;
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -11,24 +15,68 @@ class SearchScreen extends StatefulWidget {
 }
 
 class _SearchScreenState extends State<SearchScreen> {
-  final _ctrl = TextEditingController();
+  final _ctrl = SearchController();
   List<SearchResult> _results = [];
+  List<String> _history = [];
   bool _searching = false;
   String? _error;
 
-  Future<void> _search() async {
-    final q = _ctrl.text.trim();
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _history = prefs.getStringList(_historyKey) ?? [];
+    });
+  }
+
+  Future<void> _saveToHistory(String q) async {
+    final updated = [q, ..._history.where((e) => e != q)].take(_historyMax).toList();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_historyKey, updated);
+    setState(() => _history = updated);
+  }
+
+  Future<void> _removeFromHistory(String q) async {
+    final updated = _history.where((e) => e != q).toList();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_historyKey, updated);
+    setState(() => _history = updated);
+    _refreshSuggestions();
+  }
+
+  Future<void> _clearHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_historyKey);
+    setState(() => _history = []);
+    _refreshSuggestions();
+  }
+
+  void _refreshSuggestions() {
+    final text = _ctrl.text;
+    _ctrl.text = '$text ';
+    _ctrl.text = text;
+  }
+
+  Future<void> _search(String q) async {
+    q = q.trim();
     if (q.isEmpty) return;
     final api = context.read<AppState>().api;
     if (api == null) return;
-    setState(() { _searching = true; _error = null; });
+    _ctrl.closeView(q);
+    await _saveToHistory(q);
+    setState(() { _searching = true; _error = null; _results = []; });
     try {
       final results = await api.search(q);
-      setState(() { _results = results; });
+      setState(() => _results = results);
     } catch (e) {
-      setState(() { _error = e.toString(); });
+      setState(() => _error = e.toString());
     } finally {
-      setState(() { _searching = false; });
+      setState(() => _searching = false);
     }
   }
 
@@ -37,6 +85,15 @@ class _SearchScreenState extends State<SearchScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Queued: ${r.title}')),
+      );
+    }
+  }
+
+  Future<void> _castNow(SearchResult r) async {
+    await context.read<AppState>().act((api) => api.cast(r.url));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Casting: ${r.title}')),
       );
     }
   }
@@ -55,16 +112,59 @@ class _SearchScreenState extends State<SearchScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.all(12),
-            child: SearchBar(
-              controller: _ctrl,
-              hintText: 'Search YouTube...',
-              trailing: [
+            child: SearchAnchor(
+              searchController: _ctrl,
+              viewOnSubmitted: (q) => _search(q),
+              viewTrailing: [
                 IconButton(
                   icon: const Icon(Icons.search),
-                  onPressed: _search,
+                  onPressed: () => _search(_ctrl.text),
                 ),
               ],
-              onSubmitted: (_) => _search(),
+              builder: (ctx, controller) => SearchBar(
+                controller: controller,
+                hintText: 'Search YouTube...',
+                leading: const Icon(Icons.search),
+                onTap: controller.openView,
+                onChanged: (_) => controller.openView(),
+                trailing: [
+                  if (_ctrl.text.isNotEmpty || _results.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _ctrl.clear();
+                        setState(() { _results = []; _error = null; });
+                      },
+                    ),
+                ],
+              ),
+              suggestionsBuilder: (ctx, controller) {
+                final input = controller.text.trim();
+                final filtered = input.isEmpty
+                    ? _history
+                    : _history.where((h) => h.toLowerCase().contains(input.toLowerCase())).toList();
+                return [
+                  if (filtered.isNotEmpty && input.isEmpty)
+                    ListTile(
+                      dense: true,
+                      title: Text('Recent searches',
+                          style: TextStyle(color: Theme.of(ctx).colorScheme.outline, fontSize: 12)),
+                      trailing: TextButton(
+                        onPressed: _clearHistory,
+                        child: const Text('Clear all'),
+                      ),
+                    ),
+                  ...filtered.map((h) => ListTile(
+                    leading: const Icon(Icons.history),
+                    title: Text(h),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: () => _removeFromHistory(h),
+                    ),
+                    onTap: () => _search(h),
+                  )),
+                ];
+              },
             ),
           ),
           if (_searching) const LinearProgressIndicator(),
@@ -85,9 +185,20 @@ class _SearchScreenState extends State<SearchScreen> {
                       : const Icon(Icons.video_library),
                   title: Text(r.title, maxLines: 2, overflow: TextOverflow.ellipsis),
                   subtitle: Text('${r.uploader} • ${r.durationFormatted}'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.add_to_queue),
-                    onPressed: () => _addToQueue(r),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.play_circle_outline),
+                        tooltip: 'Cast now',
+                        onPressed: () => _castNow(r),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.add_to_queue),
+                        tooltip: 'Add to queue',
+                        onPressed: () => _addToQueue(r),
+                      ),
+                    ],
                   ),
                 );
               },

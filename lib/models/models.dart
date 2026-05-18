@@ -69,11 +69,11 @@ class SearchResult {
   });
 
   factory SearchResult.fromJson(Map<String, dynamic> j) => SearchResult(
-        url: j['url'] as String,
-        title: j['title'] as String,
-        uploader: j['uploader'] as String,
-        duration: j['duration'] as int,
-        thumbnail: j['thumbnail'] as String,
+        url: (j['url'] as String?) ?? '',
+        title: (j['title'] as String?) ?? '(no title)',
+        uploader: (j['uploader'] as String?) ?? '',
+        duration: (j['duration'] as int?) ?? 0,
+        thumbnail: (j['thumbnail'] as String?) ?? '',
       );
 
   String get durationFormatted {
