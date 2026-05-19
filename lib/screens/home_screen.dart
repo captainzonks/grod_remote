@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/app_state.dart';
 import 'search_screen.dart';
 import 'settings_screen.dart';
+
+/// Recognize the YouTube / Piped URL shapes the daemon already accepts.
+/// Used to decide whether to auto-fill the cast-URL sheet from clipboard;
+/// the server still does the authoritative parse via extract_video_id.
+final _kYoutubeUrlPattern = RegExp(
+  r'(youtube\.com/watch\?v=|youtu\.be/|piped\.[^/]+/watch\?v=|/watch\?v=)',
+  caseSensitive: false,
+);
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -44,9 +53,36 @@ class HomeScreen extends StatelessWidget {
                   _PlaybackControls(state: state),
                   const SizedBox(height: 16),
                   _QueueList(state: state),
+                  // Padding so FAB doesn't overlap the last queue item.
+                  const SizedBox(height: 80),
                 ],
               ),
             ),
+      floatingActionButton: state.configured
+          ? FloatingActionButton.extended(
+              onPressed: () => _openCastUrlSheet(context),
+              icon: const Icon(Icons.add_link),
+              label: const Text('Cast URL'),
+            )
+          : null,
+    );
+  }
+
+  void _openCastUrlSheet(BuildContext context) {
+    final appState = context.read<AppState>();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => Padding(
+        // Lift the sheet above the keyboard when the URL field has focus.
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: ChangeNotifierProvider.value(
+          value: appState,
+          child: const _CastUrlSheet(),
+        ),
+      ),
     );
   }
 
@@ -319,6 +355,142 @@ class _QueueList extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Bottom-sheet for casting/queueing a pasted YouTube URL.
+class _CastUrlSheet extends StatefulWidget {
+  const _CastUrlSheet();
+
+  @override
+  State<_CastUrlSheet> createState() => _CastUrlSheetState();
+}
+
+class _CastUrlSheetState extends State<_CastUrlSheet> {
+  final _ctrl = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _autoFillFromClipboard();
+  }
+
+  /// If the system clipboard holds a YouTube/Piped URL when the sheet opens,
+  /// drop it into the field. Saves the user a paste step in the common case.
+  Future<void> _autoFillFromClipboard() async {
+    final data = await Clipboard.getData('text/plain');
+    final text = data?.text?.trim() ?? '';
+    if (text.isEmpty || !_kYoutubeUrlPattern.hasMatch(text)) return;
+    if (!mounted) return;
+    setState(() => _ctrl.text = text);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit({required bool castNow}) async {
+    final url = _ctrl.text.trim();
+    if (url.isEmpty) {
+      setState(() => _error = 'Paste a YouTube URL first');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final api = context.read<AppState>().api;
+      if (api == null) throw Exception('Not connected');
+      if (castNow) {
+        // force=true so "Cast now" interrupts whatever's playing instead
+        // of silently queueing behind it.
+        await api.cast(url, force: true);
+      } else {
+        await api.queue(url);
+      }
+      if (!mounted) return;
+      // Refresh now-playing/queue display immediately.
+      context.read<AppState>().refresh();
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(castNow ? 'Casting...' : 'Queued')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Cast or queue URL',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _ctrl,
+            autofocus: true,
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+            decoration: const InputDecoration(
+              labelText: 'YouTube URL',
+              hintText: 'https://youtu.be/...',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.link),
+            ),
+            onSubmitted: _busy ? null : (_) => _submit(castNow: true),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(_error!, style: TextStyle(color: cs.error)),
+          ],
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _busy ? null : () => _submit(castNow: false),
+                  icon: const Icon(Icons.queue),
+                  label: const Text('Queue'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _busy ? null : () => _submit(castNow: true),
+                  icon: _busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.play_circle_outline),
+                  label: const Text('Cast now'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

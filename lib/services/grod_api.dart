@@ -27,7 +27,11 @@ class GrodApi {
     return list.map((e) => SearchResult.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  Future<void> cast(String url) => _post('/cast', {'url': url});
+  /// Cast a video. If [force] is true, interrupts the current cast on the
+  /// device instead of queueing behind it. Server default is false — matches
+  /// `grod cast` CLI behavior.
+  Future<void> cast(String url, {bool force = false}) =>
+      _post('/cast', {'url': url, if (force) 'force': true});
   Future<void> queue(String url) => _post('/queue', {'url': url});
   Future<void> skip() => _post('/skip', {});
   Future<void> playPause() => _post('/play-pause', {});

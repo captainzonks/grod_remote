@@ -91,7 +91,8 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _castNow(SearchResult r) async {
-    await context.read<AppState>().act((api) => api.cast(r.url));
+    // "Cast now" should interrupt current playback, not queue behind it.
+    await context.read<AppState>().act((api) => api.cast(r.url, force: true));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Casting: ${r.title}')),
