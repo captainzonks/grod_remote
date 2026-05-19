@@ -25,7 +25,21 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Grod'),
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Image.asset(
+                'assets/grod_mascot.png',
+                width: 32,
+                height: 32,
+                filterQuality: FilterQuality.medium,
+              ),
+            ),
+            const Text('Grod'),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
