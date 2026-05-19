@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -104,12 +106,83 @@ class HomeScreen extends StatelessWidget {
       );
 }
 
-class _NowPlayingCard extends StatelessWidget {
+class _NowPlayingCard extends StatefulWidget {
   final AppState state;
   const _NowPlayingCard({required this.state});
 
   @override
+  State<_NowPlayingCard> createState() => _NowPlayingCardState();
+}
+
+class _NowPlayingCardState extends State<_NowPlayingCard> {
+  /// Position from the most recent status poll, in seconds.
+  int? _basePosition;
+  /// When the most recent status arrived. Used to extrapolate the live
+  /// position between polls so the progress bar animates smoothly instead
+  /// of stepping every 3s.
+  DateTime? _baseAt;
+  /// State at the last poll — interpolation only runs while playing.
+  DeviceState? _baseState;
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _sync();
+    // 250ms is fast enough that the bar moves visibly without burning CPU.
+    _ticker = Timer.periodic(const Duration(milliseconds: 250), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void didUpdateWidget(_NowPlayingCard old) {
+    super.didUpdateWidget(old);
+    _sync();
+  }
+
+  /// Capture the latest poll values as the extrapolation baseline. Only
+  /// resets the baseline when the position from the server actually changed
+  /// — otherwise every parent rebuild would reset _baseAt and freeze the bar.
+  void _sync() {
+    final s = widget.state.status;
+    if (s == null) return;
+    final pos = s.position;
+    if (pos == null) {
+      _basePosition = null;
+      _baseAt = null;
+      _baseState = null;
+      return;
+    }
+    if (pos != _basePosition || s.state != _baseState) {
+      _basePosition = pos;
+      _baseAt = DateTime.now();
+      _baseState = s.state;
+    }
+  }
+
+  /// Position-to-display = server position + seconds elapsed since the poll
+  /// landed (only while playing — paused/buffering hold the bar still).
+  int? _livePosition(int? duration) {
+    final base = _basePosition;
+    final at = _baseAt;
+    if (base == null || at == null) return null;
+    if (_baseState != DeviceState.playing) return base;
+    final elapsed = DateTime.now().difference(at).inMilliseconds / 1000.0;
+    final live = (base + elapsed).round();
+    if (duration != null && duration > 0 && live > duration) return duration;
+    return live;
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final state = widget.state;
     final status = state.status;
     final cs = Theme.of(context).colorScheme;
 
@@ -123,34 +196,67 @@ class _NowPlayingCard extends StatelessWidget {
     final title = status?.nowPlaying?.title ?? (status?.state != DeviceState.idle ? 'Cast outside grod' : 'Nothing playing');
     final quality = status?.quality;
 
+    final duration = status?.duration;
+    final position = _livePosition(duration);
+    final showProgress = position != null && duration != null && duration > 0;
+
     return Column(
       children: [
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(icon, color: color, size: 32),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                Row(
+                  children: [
+                    Icon(icon, color: color, size: 32),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
-                          if (quality != null) ...[
-                            const SizedBox(width: 8),
-                            _QualityBadge(quality: quality),
-                          ],
+                          Row(
+                            children: [
+                              Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+                              if (quality != null) ...[
+                                const SizedBox(width: 8),
+                                _QualityBadge(quality: quality),
+                              ],
+                            ],
+                          ),
+                          Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
                         ],
                       ),
-                      Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    ),
+                    if (state.error != null)
+                      Icon(Icons.wifi_off, color: cs.error),
+                  ],
+                ),
+                if (showProgress) ...[
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: LinearProgressIndicator(
+                      value: (position / duration).clamp(0.0, 1.0),
+                      minHeight: 4,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        formatSeconds(position),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      Text(
+                        formatSeconds(duration),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ],
                   ),
-                ),
-                if (state.error != null)
-                  Icon(Icons.wifi_off, color: cs.error),
+                ],
               ],
             ),
           ),
@@ -371,21 +477,36 @@ class _CastUrlSheetState extends State<_CastUrlSheet> {
   final _ctrl = TextEditingController();
   bool _busy = false;
   String? _error;
+  /// YouTube URL detected in the clipboard at sheet open. Shown as a
+  /// dismissible chip the user can tap to populate the field. We don't
+  /// auto-fill: pre-populating a stale URL from a previous session is more
+  /// annoying than the one extra tap.
+  String? _clipboardSuggestion;
 
   @override
   void initState() {
     super.initState();
-    _autoFillFromClipboard();
+    _detectClipboardSuggestion();
   }
 
-  /// If the system clipboard holds a YouTube/Piped URL when the sheet opens,
-  /// drop it into the field. Saves the user a paste step in the common case.
-  Future<void> _autoFillFromClipboard() async {
+  Future<void> _detectClipboardSuggestion() async {
     final data = await Clipboard.getData('text/plain');
     final text = data?.text?.trim() ?? '';
     if (text.isEmpty || !_kYoutubeUrlPattern.hasMatch(text)) return;
     if (!mounted) return;
-    setState(() => _ctrl.text = text);
+    setState(() => _clipboardSuggestion = text);
+  }
+
+  void _applyClipboardSuggestion() {
+    final url = _clipboardSuggestion;
+    if (url == null) return;
+    setState(() {
+      _ctrl.text = url;
+      _ctrl.selection = TextSelection.fromPosition(
+        TextPosition(offset: url.length),
+      );
+      _clipboardSuggestion = null;
+    });
   }
 
   @override
@@ -456,6 +577,17 @@ class _CastUrlSheetState extends State<_CastUrlSheet> {
             ),
             onSubmitted: _busy ? null : (_) => _submit(castNow: true),
           ),
+          if (_clipboardSuggestion != null) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ActionChip(
+                avatar: const Icon(Icons.content_paste, size: 18),
+                label: const Text('Use clipboard URL'),
+                onPressed: _applyClipboardSuggestion,
+              ),
+            ),
+          ],
           if (_error != null) ...[
             const SizedBox(height: 8),
             Text(_error!, style: TextStyle(color: cs.error)),

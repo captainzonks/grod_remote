@@ -30,6 +30,11 @@ class Status {
   final List<QueueEntryWithPos> queue;
   final bool daemon;
   final String quality;
+  /// Current playback position in seconds. Null when no media is playing
+  /// or duration is unknown.
+  final int? position;
+  /// Total media duration in seconds. Null in the same cases as [position].
+  final int? duration;
 
   const Status({
     required this.state,
@@ -37,6 +42,8 @@ class Status {
     required this.queue,
     required this.daemon,
     required this.quality,
+    this.position,
+    this.duration,
   });
 
   factory Status.fromJson(Map<String, dynamic> j) => Status(
@@ -54,7 +61,22 @@ class Status {
             .toList(),
         daemon: j['daemon'] as bool,
         quality: (j['quality'] as String?) ?? 'best',
+        position: (j['position'] as num?)?.toInt(),
+        duration: (j['duration'] as num?)?.toInt(),
       );
+}
+
+/// Format an integer number of seconds as `M:SS` or `H:MM:SS` for display.
+String formatSeconds(int s) {
+  final h = s ~/ 3600;
+  final m = (s % 3600) ~/ 60;
+  final sec = s % 60;
+  final ss = sec.toString().padLeft(2, '0');
+  if (h > 0) {
+    final mm = m.toString().padLeft(2, '0');
+    return '$h:$mm:$ss';
+  }
+  return '$m:$ss';
 }
 
 /// Allowed cast quality values. Order is display order in dropdowns.
