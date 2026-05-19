@@ -80,10 +80,12 @@ class _NowPlayingCard extends StatelessWidget {
     final (icon, color, label) = switch (status?.state) {
       DeviceState.playing => (Icons.play_arrow, cs.primary, 'Playing'),
       DeviceState.paused => (Icons.pause, cs.secondary, 'Paused'),
+      DeviceState.buffering => (Icons.hourglass_top, cs.tertiary, 'Buffering'),
       _ => (Icons.tv_off, cs.outline, 'Idle'),
     };
 
     final title = status?.nowPlaying?.title ?? (status?.state != DeviceState.idle ? 'Cast outside grod' : 'Nothing playing');
+    final quality = status?.quality;
 
     return Column(
       children: [
@@ -98,7 +100,15 @@ class _NowPlayingCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+                      Row(
+                        children: [
+                          Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+                          if (quality != null) ...[
+                            const SizedBox(width: 8),
+                            _QualityBadge(quality: quality),
+                          ],
+                        ],
+                      ),
                       Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
                     ],
                   ),
@@ -111,6 +121,31 @@ class _NowPlayingCard extends StatelessWidget {
         ),
         if (state.error != null) _ErrorBanner(error: state.error!),
       ],
+    );
+  }
+}
+
+class _QualityBadge extends StatelessWidget {
+  final String quality;
+  const _QualityBadge({required this.quality});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        quality,
+        style: TextStyle(
+          color: cs.onSurfaceVariant,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }

@@ -46,12 +46,18 @@ class GrodApi {
     _check(res);
   }
 
+  /// Set default cast quality (e.g. "1080p", "720p"). Persists server-side
+  /// and applies to the next cast immediately.
+  Future<void> setQuality(String quality) => _post('/quality', {'quality': quality});
+
   Future<void> _post(String path, Map<String, dynamic> body) async {
-    final res = await http.post(
-      Uri.parse('$baseUrl$path'),
-      headers: _headers,
-      body: jsonEncode(body),
-    );
+    final res = await http
+        .post(
+          Uri.parse('$baseUrl$path'),
+          headers: _headers,
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 10));
     _check(res);
   }
 

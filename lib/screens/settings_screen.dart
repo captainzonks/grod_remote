@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/models.dart';
 import '../services/app_state.dart';
+import '../services/discovery.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -14,6 +16,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _portCtrl = TextEditingController();
   final _pinCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  String? _quality;
+  bool _qualitySaving = false;
+  String? _qualityError;
+  bool _discovering = false;
 
   @override
   void initState() {
@@ -22,6 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _hostCtrl.text = state.host;
     _portCtrl.text = state.port.toString();
     _pinCtrl.text = state.pin;
+    _quality = state.status?.quality;
   }
 
   @override
@@ -45,6 +52,88 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Navigator.pop(context);
   }
 
+  Future<void> _setQuality(String q) async {
+    setState(() {
+      _qualitySaving = true;
+      _qualityError = null;
+    });
+    try {
+      final api = context.read<AppState>().api;
+      if (api == null) throw Exception('Not connected');
+      await api.setQuality(q);
+      if (!mounted) return;
+      setState(() => _quality = q);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Quality set to $q'), duration: const Duration(seconds: 2)),
+      );
+      // Refresh status so home screen badge updates immediately.
+      context.read<AppState>().refresh();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _qualityError = e.toString());
+    } finally {
+      if (mounted) setState(() => _qualitySaving = false);
+    }
+  }
+
+  Future<void> _discover() async {
+    setState(() => _discovering = true);
+    try {
+      final servers = await discoverServers();
+      if (!mounted) return;
+
+      if (servers.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No grod daemons found on the LAN')),
+        );
+        return;
+      }
+
+      // If exactly one, auto-fill. Otherwise present a chooser.
+      final chosen = servers.length == 1
+          ? servers.first
+          : await showDialog<DiscoveredServer>(
+              context: context,
+              builder: (ctx) => SimpleDialog(
+                title: const Text('Found grod daemons'),
+                children: servers
+                    .map((s) => SimpleDialogOption(
+                          onPressed: () => Navigator.pop(ctx, s),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(s.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              Text(
+                                '${s.host}:${s.port}'
+                                '${s.version.isNotEmpty ? '  •  v${s.version}' : ''}'
+                                '${s.pinRequired ? '  •  PIN required' : ''}',
+                                style: Theme.of(ctx).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ))
+                    .toList(),
+              ),
+            );
+
+      if (chosen == null || !mounted) return;
+      setState(() {
+        _hostCtrl.text = chosen.host;
+        _portCtrl.text = chosen.port.toString();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Filled ${chosen.host}:${chosen.port} — tap Save server')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Discovery failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _discovering = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -56,6 +145,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              OutlinedButton.icon(
+                onPressed: _discovering ? null : _discover,
+                icon: _discovering
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.search),
+                label: Text(_discovering ? 'Searching...' : 'Find server on LAN'),
+              ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _hostCtrl,
                 decoration: const InputDecoration(
@@ -93,7 +194,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 obscureText: true,
               ),
               const SizedBox(height: 24),
-              FilledButton(onPressed: _save, child: const Text('Save')),
+              FilledButton(onPressed: _save, child: const Text('Save server')),
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 16),
+              Text(
+                'Cast quality',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Affects new casts. Saved on server.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _quality,
+                decoration: const InputDecoration(
+                  labelText: 'Quality',
+                  border: OutlineInputBorder(),
+                ),
+                items: kQualityOptions
+                    .map((q) => DropdownMenuItem(value: q, child: Text(q)))
+                    .toList(),
+                onChanged: _qualitySaving
+                    ? null
+                    : (v) {
+                        if (v != null) _setQuality(v);
+                      },
+              ),
+              if (_qualitySaving)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: LinearProgressIndicator(),
+                ),
+              if (_qualityError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _qualityError!,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ),
             ],
           ),
         ),

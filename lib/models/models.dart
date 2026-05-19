@@ -22,25 +22,28 @@ class QueueEntryWithPos {
       );
 }
 
-enum DeviceState { playing, paused, idle }
+enum DeviceState { playing, paused, buffering, idle }
 
 class Status {
   final DeviceState state;
   final QueueEntry? nowPlaying;
   final List<QueueEntryWithPos> queue;
   final bool daemon;
+  final String quality;
 
   const Status({
     required this.state,
     required this.nowPlaying,
     required this.queue,
     required this.daemon,
+    required this.quality,
   });
 
   factory Status.fromJson(Map<String, dynamic> j) => Status(
         state: switch (j['state'] as String) {
           'playing' => DeviceState.playing,
           'paused' => DeviceState.paused,
+          'buffering' => DeviceState.buffering,
           _ => DeviceState.idle,
         },
         nowPlaying: j['now_playing'] != null
@@ -50,8 +53,12 @@ class Status {
             .map((e) => QueueEntryWithPos.fromJson(e as Map<String, dynamic>))
             .toList(),
         daemon: j['daemon'] as bool,
+        quality: (j['quality'] as String?) ?? 'best',
       );
 }
+
+/// Allowed cast quality values. Order is display order in dropdowns.
+const List<String> kQualityOptions = ['best', '1080p', '720p', '480p', '360p'];
 
 class SearchResult {
   final String url;
