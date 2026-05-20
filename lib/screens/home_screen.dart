@@ -25,13 +25,13 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 0,
+        titleSpacing: 16,
         title: Row(
           children: [
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: Image.asset(
-                'assets/grod_mascot.png',
+                'assets/grod_mascot.webp',
                 width: 32,
                 height: 32,
                 filterQuality: FilterQuality.medium,
