@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Mascot purple, sampled from the body of the goblin in grod-mascot-01.png. -->
-    <color name="ic_launcher_background">#704495</color>
+    <!-- Brand dark purple. Sampled from the grod_tv banner art so both apps
+         render with a consistent identity in the launcher grid. -->
+    <color name="ic_launcher_background">#22053E</color>
 </resources>

@@ -1,5 +1,9 @@
 # grod_remote
 
+<p align="center">
+  <img src="assets/grod-remote-logo-01.webp" alt="grod_remote logo" width="280" />
+</p>
+
 A Flutter phone remote for the [`grod`](https://github.com/captainzonks/grod) /
 [`grod_tv`](https://github.com/captainzonks/grod_tv) cast daemons. Drives the
 same `http://<daemon>:7878` API from Android (and, by virtue of Flutter, can be
