@@ -37,7 +37,7 @@ class HomeScreen extends StatelessWidget {
                 filterQuality: FilterQuality.medium,
               ),
             ),
-            const Text('Grod'),
+            const Text('Grod Remote'),
           ],
         ),
         actions: [
