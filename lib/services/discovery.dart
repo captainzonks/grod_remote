@@ -5,7 +5,7 @@
 library;
 
 import 'dart:async';
-import 'dart:io' show Platform, RawDatagramSocket, InternetAddress;
+import 'dart:io' show Platform, RawDatagramSocket;
 import 'package:multicast_dns/multicast_dns.dart';
 
 /// On Android, the underlying Dart Socket implementation throws

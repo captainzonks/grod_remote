@@ -54,6 +54,11 @@ class GrodApi {
   /// and applies to the next cast immediately.
   Future<void> setQuality(String quality) => _post('/quality', {'quality': quality});
 
+  /// Point the daemon at a different Piped instance. The daemon rebuilds
+  /// its PipedClient automatically; the new URL applies to the next /cast
+  /// or /search.
+  Future<void> setPipedUrl(String url) => _post('/piped-url', {'url': url});
+
   Future<void> _post(String path, Map<String, dynamic> body) async {
     final res = await http
         .post(
