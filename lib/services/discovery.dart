@@ -5,7 +5,28 @@
 library;
 
 import 'dart:async';
+import 'dart:io' show Platform, RawDatagramSocket, InternetAddress;
 import 'package:multicast_dns/multicast_dns.dart';
+
+/// On Android, the underlying Dart Socket implementation throws
+/// `reusePort not supported on this platform` when multicast_dns' default
+/// factory passes `reusePort: true`. Override the factory so we strip that
+/// flag on Android while preserving full behavior on other platforms.
+Future<RawDatagramSocket> _androidSafeSocketFactory(
+  dynamic host,
+  int port, {
+  bool reuseAddress = true,
+  bool reusePort = false,
+  int ttl = 255,
+}) {
+  return RawDatagramSocket.bind(
+    host,
+    port,
+    reuseAddress: reuseAddress,
+    reusePort: Platform.isAndroid ? false : reusePort,
+    ttl: ttl,
+  );
+}
 
 /// A grod daemon found via mDNS.
 class DiscoveredServer {
@@ -33,7 +54,7 @@ Future<List<DiscoveredServer>> discoverServers({
   Duration timeout = const Duration(seconds: 4),
 }) async {
   const serviceType = '_grod._tcp.local';
-  final client = MDnsClient();
+  final client = MDnsClient(rawDatagramSocketFactory: _androidSafeSocketFactory);
   final results = <DiscoveredServer>[];
 
   await client.start();
