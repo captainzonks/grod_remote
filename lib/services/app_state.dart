@@ -8,10 +8,15 @@ class AppState extends ChangeNotifier {
   static const _keyHost = 'server_host';
   static const _keyPort = 'server_port';
   static const _keyPin = 'server_pin';
+  static const _keyLastPipedUrl = 'last_piped_url';
 
   String host = '';
   int port = 7878;
   String pin = '';
+  /// Most recent Piped URL the user chose from this client. Used to
+  /// pre-fill the Settings UI and to re-assert the user's choice if a
+  /// fresh daemon instance comes up with a different default.
+  String lastPipedUrl = '';
   GrodApi? _api;
   Status? status;
   String? error;
@@ -30,6 +35,7 @@ class AppState extends ChangeNotifier {
     host = prefs.getString(_keyHost) ?? '';
     port = prefs.getInt(_keyPort) ?? 7878;
     pin = prefs.getString(_keyPin) ?? '';
+    lastPipedUrl = prefs.getString(_keyLastPipedUrl) ?? '';
     if (configured) _connect();
     notifyListeners();
   }
@@ -46,6 +52,27 @@ class AppState extends ChangeNotifier {
     await prefs.setString(_keyPin, pi);
     _connect();
     notifyListeners();
+  }
+
+  /// Push a Piped instance URL to the daemon and remember it locally so
+  /// the next time this client connects it can re-assert the user's
+  /// preference if a daemon restart reset it to the bundled default.
+  Future<void> setPipedUrl(String url) async {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return;
+    lastPipedUrl = trimmed;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyLastPipedUrl, trimmed);
+    notifyListeners();
+    if (_api != null) {
+      try {
+        await _api!.setPipedUrl(trimmed);
+      } catch (e) {
+        error = e.toString();
+        notifyListeners();
+        rethrow;
+      }
+    }
   }
 
   void _connect() {

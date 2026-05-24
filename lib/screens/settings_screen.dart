@@ -15,11 +15,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _hostCtrl = TextEditingController();
   final _portCtrl = TextEditingController();
   final _pinCtrl = TextEditingController();
+  final _pipedCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   String? _quality;
   bool _qualitySaving = false;
   String? _qualityError;
   bool _discovering = false;
+  bool _pipedSaving = false;
+  String? _pipedError;
 
   @override
   void initState() {
@@ -29,6 +32,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _portCtrl.text = state.port.toString();
     _pinCtrl.text = state.pin;
     _quality = state.status?.quality;
+    // Prefer the daemon's reported URL when known; fall back to whatever
+    // the user last typed on this client.
+    _pipedCtrl.text = state.status?.pipedUrl ?? state.lastPipedUrl;
   }
 
   @override
@@ -36,6 +42,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _hostCtrl.dispose();
     _portCtrl.dispose();
     _pinCtrl.dispose();
+    _pipedCtrl.dispose();
     super.dispose();
   }
 
@@ -73,6 +80,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() => _qualityError = e.toString());
     } finally {
       if (mounted) setState(() => _qualitySaving = false);
+    }
+  }
+
+  Future<void> _setPipedUrl(String url) async {
+    setState(() {
+      _pipedSaving = true;
+      _pipedError = null;
+    });
+    try {
+      await context.read<AppState>().setPipedUrl(url);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Piped URL set to $url'), duration: const Duration(seconds: 2)),
+      );
+      context.read<AppState>().refresh();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _pipedError = e.toString());
+    } finally {
+      if (mounted) setState(() => _pipedSaving = false);
     }
   }
 
@@ -195,6 +222,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 24),
               FilledButton(onPressed: _save, child: const Text('Save server')),
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 16),
+              Text(
+                'Piped instance',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Daemon will use this Piped API for search and stream resolution. '
+                'Pick a preset or type a custom URL.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+              // Preset menu — using PopupMenuButton means D-pad / tap users get
+              // a one-shot picker without a full bottom-sheet ceremony.
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _pipedCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Piped API URL',
+                        hintText: 'https://pipedapi.example.com',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.url,
+                      autocorrect: false,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.expand_more),
+                    tooltip: 'Pick a preset',
+                    onSelected: (v) {
+                      setState(() => _pipedCtrl.text = v);
+                    },
+                    itemBuilder: (_) => kPipedPresets
+                        .map((u) => PopupMenuItem(value: u, child: Text(u)))
+                        .toList(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              FilledButton.tonal(
+                onPressed: _pipedSaving
+                    ? null
+                    : () {
+                        final url = _pipedCtrl.text.trim();
+                        if (url.isEmpty) return;
+                        _setPipedUrl(url);
+                      },
+                child: Text(_pipedSaving ? 'Saving…' : 'Save Piped URL'),
+              ),
+              if (_pipedError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _pipedError!,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ),
               const SizedBox(height: 24),
               const Divider(),
               const SizedBox(height: 16),

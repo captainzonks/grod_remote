@@ -35,6 +35,9 @@ class Status {
   final int? position;
   /// Total media duration in seconds. Null in the same cases as [position].
   final int? duration;
+  /// Daemon's configured Piped API URL. Nullable so older daemons that
+  /// predate the field still parse.
+  final String? pipedUrl;
 
   const Status({
     required this.state,
@@ -44,6 +47,7 @@ class Status {
     required this.quality,
     this.position,
     this.duration,
+    this.pipedUrl,
   });
 
   factory Status.fromJson(Map<String, dynamic> j) => Status(
@@ -63,6 +67,7 @@ class Status {
         quality: (j['quality'] as String?) ?? 'best',
         position: (j['position'] as num?)?.toInt(),
         duration: (j['duration'] as num?)?.toInt(),
+        pipedUrl: j['piped_url'] as String?,
       );
 }
 
@@ -81,6 +86,20 @@ String formatSeconds(int s) {
 
 /// Allowed cast quality values. Order is display order in dropdowns.
 const List<String> kQualityOptions = ['best', '1080p', '720p', '480p', '360p'];
+
+/// Public Piped instances we ship as presets. Updated periodically from
+/// the upstream Piped frontend; the user can always type a custom URL
+/// (e.g. a self-hosted instance like `https://piped.example.com`) and the
+/// settings UI persists the choice locally + pushes it to the daemon.
+const List<String> kPipedPresets = [
+  'https://pipedapi.kavin.rocks',
+  'https://pipedapi.adminforge.de',
+  'https://pipedapi.tokhmi.xyz',
+  'https://pipedapi.r4fo.com',
+  'https://pipedapi.privacydev.net',
+  'https://pipedapi.darkness.services',
+  'https://pipedapi.smnz.de',
+];
 
 class SearchResult {
   final String url;
