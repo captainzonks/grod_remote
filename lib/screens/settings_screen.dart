@@ -31,7 +31,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _hostCtrl.text = state.host;
     _portCtrl.text = state.port.toString();
     _pinCtrl.text = state.pin;
-    _quality = state.status?.quality;
+    // Quality reads from the locally-persisted preference (not
+    // `status.quality`, which reports the in-flight track's resolved
+    // label and would silently degrade the dropdown to 360p after a
+    // low-quality cast).
+    _quality = state.defaultQuality;
     // Prefer the daemon's reported URL when known; fall back to whatever
     // the user last typed on this client.
     _pipedCtrl.text = state.status?.pipedUrl ?? state.lastPipedUrl;
@@ -65,16 +69,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _qualityError = null;
     });
     try {
-      final api = context.read<AppState>().api;
-      if (api == null) throw Exception('Not connected');
-      await api.setQuality(q);
+      final state = context.read<AppState>();
+      // Persist locally and push to daemon in one step. Local persistence
+      // is what survives reconnects; the daemon push keeps the next /cast
+      // honoring the new preference immediately.
+      await state.setDefaultQuality(q);
       if (!mounted) return;
       setState(() => _quality = q);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Quality set to $q'), duration: const Duration(seconds: 2)),
       );
-      // Refresh status so home screen badge updates immediately.
-      context.read<AppState>().refresh();
+      state.refresh();
     } catch (e) {
       if (!mounted) return;
       setState(() => _qualityError = e.toString());
