@@ -61,6 +61,7 @@ flutter:
 
   assets:
     - assets/grod_mascot.webp
+    - assets/grod-remote-logo-01.webp
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
