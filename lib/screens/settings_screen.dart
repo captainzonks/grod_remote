@@ -170,8 +170,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
+      // Wrap in SingleChildScrollView so:
+      //  - The full form fits short screens (the column is now long enough
+      //    to overflow on phones once the Piped + Quality sections were added)
+      //  - The soft keyboard reduces the Scaffold's body via
+      //    `resizeToAvoidBottomInset`; the ScrollView then has scrollable
+      //    space and Flutter auto-scrolls the focused field into view.
+      body: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          24,
+          24,
+          24,
+          // Reserve space for the on-screen keyboard so the field that opens
+          // it stays visible above the IME instead of being clipped behind.
+          24 + MediaQuery.of(context).viewInsets.bottom,
+        ),
         child: Form(
           key: _formKey,
           child: Column(
