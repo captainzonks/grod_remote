@@ -166,219 +166,281 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// Section heading + optional subtitle, used inside each settings Card so
+  /// the three groups share the same typography rhythm.
+  Widget _sectionHeader(BuildContext context, String title, [String? subtitle]) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          title,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  /// Wrap a settings section in a Card with consistent inner padding.
+  Widget _section({required Widget child}) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [child],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      // Wrap in SingleChildScrollView so:
-      //  - The full form fits short screens (the column is now long enough
-      //    to overflow on phones once the Piped + Quality sections were added)
-      //  - The soft keyboard reduces the Scaffold's body via
-      //    `resizeToAvoidBottomInset`; the ScrollView then has scrollable
+      // SingleChildScrollView is required so:
+      //  - The form fits short screens (it overflows once the Piped + Quality
+      //    sections were added)
+      //  - With `resizeToAvoidBottomInset` (default true), the soft keyboard
+      //    shrinks the Scaffold; the ScrollView then provides scrollable
       //    space and Flutter auto-scrolls the focused field into view.
       body: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
-          24,
-          24,
-          24,
+          16,
+          16,
+          16,
           // Reserve space for the on-screen keyboard so the field that opens
           // it stays visible above the IME instead of being clipped behind.
-          24 + MediaQuery.of(context).viewInsets.bottom,
+          16 + MediaQuery.of(context).viewInsets.bottom,
         ),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              OutlinedButton.icon(
-                onPressed: _discovering ? null : _discover,
-                icon: _discovering
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.search),
-                label: Text(_discovering ? 'Searching...' : 'Find server on LAN'),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _hostCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Server IP',
-                  hintText: '192.168.1.100',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.text,
-                autocorrect: false,
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _portCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Port',
-                  hintText: '7878',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-                validator: (v) {
-                  final n = int.tryParse(v ?? '');
-                  return (n == null || n < 1 || n > 65535) ? 'Invalid port' : null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _pinCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'PIN (optional)',
-                  hintText: 'Leave empty if no PIN set',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-                obscureText: true,
-              ),
-              const SizedBox(height: 24),
-              FilledButton(onPressed: _save, child: const Text('Save server')),
-              const SizedBox(height: 24),
-              const Divider(),
-              const SizedBox(height: 16),
-              Text(
-                'Piped instance',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Daemon will use this Piped API for search and stream resolution. '
-                'Pick a preset or type a custom URL.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 12),
-              // Preset menu — custom (user-saved) URLs render at the top
-              // with a delete affordance, then a divider, then the bundled
-              // presets.
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _pipedCtrl,
+              _section(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _sectionHeader(
+                      context,
+                      'Server',
+                      'Address of the grod or grod_tv daemon on your LAN.',
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _discovering ? null : _discover,
+                      icon: _discovering
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.search),
+                      label: Text(_discovering ? 'Searching…' : 'Find server on LAN'),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _hostCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'Piped API URL',
-                        hintText: 'https://pipedapi.example.com',
+                        labelText: 'Server IP',
+                        hintText: '192.168.1.100',
                         border: OutlineInputBorder(),
                       ),
-                      keyboardType: TextInputType.url,
+                      keyboardType: TextInputType.text,
                       autocorrect: false,
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Required' : null,
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Consumer<AppState>(
-                    builder: (context, state, _) => PopupMenuButton<String>(
-                      icon: const Icon(Icons.expand_more),
-                      tooltip: 'Pick a Piped instance',
-                      onSelected: (v) {
-                        setState(() => _pipedCtrl.text = v);
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _portCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Port',
+                        hintText: '7878',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      validator: (v) {
+                        final n = int.tryParse(v ?? '');
+                        return (n == null || n < 1 || n > 65535)
+                            ? 'Invalid port'
+                            : null;
                       },
-                      itemBuilder: (menuCtx) => [
-                        for (final url in state.customPipedUrls)
-                          PopupMenuItem<String>(
-                            value: url,
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    url,
-                                    overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _pinCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'PIN (optional)',
+                        hintText: 'Leave empty if no PIN set',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      obscureText: true,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: _save,
+                      child: const Text('Save server'),
+                    ),
+                  ],
+                ),
+              ),
+              _section(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _sectionHeader(
+                      context,
+                      'Piped instance',
+                      'The daemon uses this Piped API for search and stream '
+                      'resolution. Pick a preset or type a custom URL.',
+                    ),
+                    // Custom (user-saved) URLs render at the top of the
+                    // dropdown with a delete affordance, then a divider, then
+                    // the bundled presets.
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _pipedCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Piped API URL',
+                              hintText: 'https://pipedapi.example.com',
+                              border: OutlineInputBorder(),
+                            ),
+                            keyboardType: TextInputType.url,
+                            autocorrect: false,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Consumer<AppState>(
+                          builder: (context, state, _) =>
+                              PopupMenuButton<String>(
+                            icon: const Icon(Icons.expand_more),
+                            tooltip: 'Pick a Piped instance',
+                            onSelected: (v) {
+                              setState(() => _pipedCtrl.text = v);
+                            },
+                            itemBuilder: (menuCtx) => [
+                              for (final url in state.customPipedUrls)
+                                PopupMenuItem<String>(
+                                  value: url,
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          url,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      // Pop the menu via the menu route's
+                                      // context so the surrounding
+                                      // PopupMenuItem onSelected doesn't fire
+                                      // and pre-fill the field with a URL the
+                                      // user just removed.
+                                      IconButton(
+                                        icon: const Icon(Icons.close, size: 18),
+                                        tooltip: 'Remove from list',
+                                        onPressed: () {
+                                          Navigator.of(menuCtx).pop();
+                                          state.removeCustomPipedUrl(url);
+                                        },
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                // Inline delete. Pop the menu via the menu
-                                // route's context so the surrounding
-                                // PopupMenuItem onSelected doesn't fire and
-                                // pre-fill the field with a URL the user
-                                // just removed.
-                                IconButton(
-                                  icon: const Icon(Icons.close, size: 18),
-                                  tooltip: 'Remove from list',
-                                  onPressed: () {
-                                    Navigator.of(menuCtx).pop();
-                                    state.removeCustomPipedUrl(url);
-                                  },
+                              if (state.customPipedUrls.isNotEmpty)
+                                const PopupMenuDivider(),
+                              for (final url in kPipedPresets)
+                                PopupMenuItem<String>(
+                                  value: url,
+                                  child: Text(url),
                                 ),
-                              ],
-                            ),
+                            ],
                           ),
-                        if (state.customPipedUrls.isNotEmpty)
-                          const PopupMenuDivider(),
-                        for (final url in kPipedPresets)
-                          PopupMenuItem<String>(
-                            value: url,
-                            child: Text(url),
-                          ),
+                        ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              FilledButton.tonal(
-                onPressed: _pipedSaving
-                    ? null
-                    : () {
-                        final url = _pipedCtrl.text.trim();
-                        if (url.isEmpty) return;
-                        _setPipedUrl(url);
-                      },
-                child: Text(_pipedSaving ? 'Saving…' : 'Save Piped URL'),
-              ),
-              if (_pipedError != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    _pipedError!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
-                  ),
+                    const SizedBox(height: 12),
+                    FilledButton.tonal(
+                      onPressed: _pipedSaving
+                          ? null
+                          : () {
+                              final url = _pipedCtrl.text.trim();
+                              if (url.isEmpty) return;
+                              _setPipedUrl(url);
+                            },
+                      child: Text(_pipedSaving ? 'Saving…' : 'Save Piped URL'),
+                    ),
+                    if (_pipedError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text(
+                          _pipedError!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-              const SizedBox(height: 24),
-              const Divider(),
-              const SizedBox(height: 16),
-              Text(
-                'Cast quality',
-                style: Theme.of(context).textTheme.titleMedium,
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Affects new casts. Saved on server.',
-                style: Theme.of(context).textTheme.bodySmall,
+              _section(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _sectionHeader(
+                      context,
+                      'Cast quality',
+                      'Applies to new casts. Persisted on the daemon.',
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: _quality,
+                      decoration: const InputDecoration(
+                        labelText: 'Quality',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: kQualityOptions
+                          .map((q) => DropdownMenuItem(value: q, child: Text(q)))
+                          .toList(),
+                      onChanged: _qualitySaving
+                          ? null
+                          : (v) {
+                              if (v != null) _setQuality(v);
+                            },
+                    ),
+                    if (_qualitySaving)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 12),
+                        child: LinearProgressIndicator(),
+                      ),
+                    if (_qualityError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text(
+                          _qualityError!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _quality,
-                decoration: const InputDecoration(
-                  labelText: 'Quality',
-                  border: OutlineInputBorder(),
-                ),
-                items: kQualityOptions
-                    .map((q) => DropdownMenuItem(value: q, child: Text(q)))
-                    .toList(),
-                onChanged: _qualitySaving
-                    ? null
-                    : (v) {
-                        if (v != null) _setQuality(v);
-                      },
-              ),
-              if (_qualitySaving)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: LinearProgressIndicator(),
-                ),
-              if (_qualityError != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    _qualityError!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
-                  ),
-                ),
             ],
           ),
         ),
