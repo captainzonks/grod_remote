@@ -254,8 +254,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 12),
-              // Preset menu — using PopupMenuButton means D-pad / tap users get
-              // a one-shot picker without a full bottom-sheet ceremony.
+              // Preset menu — custom (user-saved) URLs render at the top
+              // with a delete affordance, then a divider, then the bundled
+              // presets.
               Row(
                 children: [
                   Expanded(
@@ -271,15 +272,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.expand_more),
-                    tooltip: 'Pick a preset',
-                    onSelected: (v) {
-                      setState(() => _pipedCtrl.text = v);
-                    },
-                    itemBuilder: (_) => kPipedPresets
-                        .map((u) => PopupMenuItem(value: u, child: Text(u)))
-                        .toList(),
+                  Consumer<AppState>(
+                    builder: (context, state, _) => PopupMenuButton<String>(
+                      icon: const Icon(Icons.expand_more),
+                      tooltip: 'Pick a Piped instance',
+                      onSelected: (v) {
+                        setState(() => _pipedCtrl.text = v);
+                      },
+                      itemBuilder: (menuCtx) => [
+                        for (final url in state.customPipedUrls)
+                          PopupMenuItem<String>(
+                            value: url,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    url,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                // Inline delete. Pop the menu via the menu
+                                // route's context so the surrounding
+                                // PopupMenuItem onSelected doesn't fire and
+                                // pre-fill the field with a URL the user
+                                // just removed.
+                                IconButton(
+                                  icon: const Icon(Icons.close, size: 18),
+                                  tooltip: 'Remove from list',
+                                  onPressed: () {
+                                    Navigator.of(menuCtx).pop();
+                                    state.removeCustomPipedUrl(url);
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (state.customPipedUrls.isNotEmpty)
+                          const PopupMenuDivider(),
+                        for (final url in kPipedPresets)
+                          PopupMenuItem<String>(
+                            value: url,
+                            child: Text(url),
+                          ),
+                      ],
+                    ),
                   ),
                 ],
               ),

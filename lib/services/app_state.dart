@@ -10,6 +10,11 @@ class AppState extends ChangeNotifier {
   static const _keyPin = 'server_pin';
   static const _keyDefaultQuality = 'default_quality';
   static const _keyLastPipedUrl = 'last_piped_url';
+  static const _keyCustomPipedUrls = 'custom_piped_urls';
+
+  /// Cap on user-added Piped URLs. Keeps the dropdown readable and
+  /// SharedPrefs payload bounded if the user habitually pastes new URLs.
+  static const int _customPipedUrlCap = 10;
 
   String host = '';
   int port = 7878;
@@ -18,6 +23,10 @@ class AppState extends ChangeNotifier {
   /// pre-fill the Settings UI and to re-assert the user's choice if a
   /// fresh daemon instance comes up with a different default.
   String lastPipedUrl = '';
+  /// User-added Piped instance URLs, most-recently-saved first. Distinct
+  /// from `kPipedPresets`; rendered in the dropdown above the bundled
+  /// defaults with a divider between the two groups.
+  List<String> customPipedUrls = const [];
   GrodApi? _api;
   Status? status;
   String? error;
@@ -45,6 +54,7 @@ class AppState extends ChangeNotifier {
     pin = prefs.getString(_keyPin) ?? '';
     defaultQuality = prefs.getString(_keyDefaultQuality) ?? 'best';
     lastPipedUrl = prefs.getString(_keyLastPipedUrl) ?? '';
+    customPipedUrls = prefs.getStringList(_keyCustomPipedUrls) ?? const [];
     if (configured) _connect();
     notifyListeners();
   }
@@ -93,6 +103,23 @@ class AppState extends ChangeNotifier {
     lastPipedUrl = trimmed;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyLastPipedUrl, trimmed);
+
+    // Track non-default URLs in the dropdown's "custom" group. De-dupe by
+    // exact match (the user can paste with/without a trailing slash and
+    // hit the daemon-side trim — but for the dropdown we only group what
+    // they actually saved). Move-to-front so the latest pick is on top.
+    if (!kPipedPresets.contains(trimmed)) {
+      final next = <String>[
+        trimmed,
+        ...customPipedUrls.where((u) => u != trimmed),
+      ];
+      // Cap so the dropdown doesn't grow without bound.
+      customPipedUrls = next.length > _customPipedUrlCap
+          ? next.sublist(0, _customPipedUrlCap)
+          : next;
+      await prefs.setStringList(_keyCustomPipedUrls, customPipedUrls);
+    }
+
     notifyListeners();
     if (_api != null) {
       try {
@@ -103,6 +130,17 @@ class AppState extends ChangeNotifier {
         rethrow;
       }
     }
+  }
+
+  /// Remove a saved custom Piped URL. Does not affect the daemon — the
+  /// daemon's `piped_url` setting is whatever was last POSTed. The user
+  /// can re-add the URL by saving it again.
+  Future<void> removeCustomPipedUrl(String url) async {
+    if (!customPipedUrls.contains(url)) return;
+    customPipedUrls = customPipedUrls.where((u) => u != url).toList();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_keyCustomPipedUrls, customPipedUrls);
+    notifyListeners();
   }
 
   Future<void> _pushDefaultQuality() async {
