@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../services/app_state.dart';
+import '../utils/friendly_error.dart';
 
 const _historyKey = 'search_history';
 const _historyMax = 20;
@@ -75,29 +76,39 @@ class _SearchScreenState extends State<SearchScreen> {
       final results = await api.search(q).timeout(const Duration(seconds: 15));
       if (mounted) setState(() => _results = results);
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = friendlyError(e));
     } finally {
       if (mounted) setState(() => _searching = false);
     }
   }
 
   Future<void> _addToQueue(SearchResult r) async {
-    await context.read<AppState>().act((api) => api.queue(r.url));
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Queued: ${r.title}')),
-      );
-    }
+    final state = context.read<AppState>();
+    await state.act((api) => api.queue(r.url));
+    if (!mounted) return;
+    final err = state.error;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(err == null
+            ? 'Queued: ${r.title}'
+            : 'Could not queue — ${friendlyError(err)}'),
+      ),
+    );
   }
 
   Future<void> _castNow(SearchResult r) async {
+    final state = context.read<AppState>();
     // "Cast now" should interrupt current playback, not queue behind it.
-    await context.read<AppState>().act((api) => api.cast(r.url, force: true));
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Casting: ${r.title}')),
-      );
-    }
+    await state.act((api) => api.cast(r.url, force: true));
+    if (!mounted) return;
+    final err = state.error;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(err == null
+            ? 'Casting: ${r.title}'
+            : 'Could not cast — ${friendlyError(err)}'),
+      ),
+    );
   }
 
   @override
