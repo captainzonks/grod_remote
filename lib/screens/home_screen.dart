@@ -207,7 +207,8 @@ class _NowPlayingCardState extends State<_NowPlayingCard> {
       _ => (Icons.tv_off, cs.outline, 'Idle'),
     };
 
-    final title = status?.nowPlaying?.title ?? (status?.state != DeviceState.idle ? 'Cast outside grod' : 'Nothing playing');
+    final isIdle = status?.state == null || status?.state == DeviceState.idle;
+    final title = status?.nowPlaying?.title ?? (isIdle ? 'Nothing playing' : 'Cast outside grod');
     final quality = status?.quality;
 
     final duration = status?.duration;
@@ -240,6 +241,15 @@ class _NowPlayingCardState extends State<_NowPlayingCard> {
                             ],
                           ),
                           Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
+                          if (isIdle && status?.nowPlaying == null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              'Tap Cast URL or Search to start',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -254,6 +264,8 @@ class _NowPlayingCardState extends State<_NowPlayingCard> {
                     child: LinearProgressIndicator(
                       value: (position / duration).clamp(0.0, 1.0),
                       minHeight: 4,
+                      color: color,
+                      backgroundColor: color.withValues(alpha: 0.18),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -289,17 +301,18 @@ class _QualityBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(4),
+        color: cs.secondaryContainer,
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         quality,
         style: TextStyle(
-          color: cs.onSurfaceVariant,
+          color: cs.onSecondaryContainer,
           fontSize: 11,
           fontWeight: FontWeight.w600,
+          letterSpacing: 0.2,
         ),
       ),
     );
