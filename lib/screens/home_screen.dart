@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/app_state.dart';
+import '../utils/friendly_error.dart';
 import 'search_screen.dart';
 import 'settings_screen.dart';
 
@@ -323,19 +324,7 @@ class _ErrorBanner extends StatelessWidget {
   final String error;
   const _ErrorBanner({required this.error});
 
-  String get _short {
-    if (error.contains('Connection refused') || error.contains('SocketException')) {
-      return 'Cannot reach server';
-    }
-    if (error.contains('401') || error.contains('Unauthorized')) {
-      return 'Wrong PIN';
-    }
-    if (error.contains('TimeoutException') || error.contains('timed out')) {
-      return 'Connection timed out';
-    }
-    // Strip "Exception:" prefix noise
-    return error.replaceFirst(RegExp(r'^[A-Za-z]+Exception:\s*'), '');
-  }
+  String get _short => friendlyError(error);
 
   @override
   Widget build(BuildContext context) {
@@ -571,7 +560,7 @@ class _CastUrlSheetState extends State<_CastUrlSheet> {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      setState(() => _error = friendlyError(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

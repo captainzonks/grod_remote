@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/app_state.dart';
 import '../services/discovery.dart';
+import '../utils/friendly_error.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -82,7 +83,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       state.refresh();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _qualityError = e.toString());
+      setState(() => _qualityError = friendlyError(e));
     } finally {
       if (mounted) setState(() => _qualitySaving = false);
     }
@@ -102,7 +103,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context.read<AppState>().refresh();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _pipedError = e.toString());
+      setState(() => _pipedError = friendlyError(e));
     } finally {
       if (mounted) setState(() => _pipedSaving = false);
     }
@@ -159,7 +160,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Discovery failed: $e')),
+        SnackBar(content: Text('Discovery failed — ${friendlyError(e)}')),
       );
     } finally {
       if (mounted) setState(() => _discovering = false);
