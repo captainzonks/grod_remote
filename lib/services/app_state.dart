@@ -94,6 +94,37 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Optimistic volume shown by the slider while a `setVolume` request is in
+  /// flight or settling. The daemon's reported `status.volume` lags by up to
+  /// one poll (3s), so without this the slider thumb would snap back to the
+  /// old value between drag-end and the next poll. Null means "trust
+  /// status.volume".
+  double? _pendingVolume;
+
+  /// Volume the UI should display: the optimistic pending value while a drag
+  /// is settling, else the daemon-reported level, else a neutral 0.5 fallback
+  /// for daemons that predate the `volume` field.
+  double get displayVolume => _pendingVolume ?? status?.volume ?? 0.5;
+
+  /// Set absolute device volume in [0.0, 1.0]. Updates the optimistic local
+  /// value immediately so the slider stays put, then pushes to the daemon.
+  /// On success the next poll reconciles `status.volume` (see [refresh]); on
+  /// failure the optimistic value is dropped so the slider reflects reality.
+  Future<void> setVolume(double level) async {
+    final clamped = level.clamp(0.0, 1.0);
+    _pendingVolume = clamped;
+    notifyListeners();
+    if (_api == null) return;
+    try {
+      await _api!.setVolume(clamped);
+      error = null;
+    } catch (e) {
+      error = e.toString();
+      _pendingVolume = null; // fall back to the device's real level
+    }
+    notifyListeners();
+  }
+
   /// Push a Piped instance URL to the daemon and remember it locally so
   /// the next time this client connects it can re-assert the user's
   /// preference if a daemon restart reset it to the bundled default.
@@ -165,6 +196,16 @@ class AppState extends ChangeNotifier {
       final s = await _api!.status();
       status = s;
       error = null;
+      // Drop the optimistic volume once the daemon has caught up to (or near)
+      // the value we pushed — within one Chromecast step (~0.05). Keeping it
+      // until then prevents the slider snapping back during the poll lag.
+      final pending = _pendingVolume;
+      final reported = s.volume;
+      if (pending != null &&
+          reported != null &&
+          (reported - pending).abs() < 0.05) {
+        _pendingVolume = null;
+      }
     } catch (e) {
       error = e.toString();
     }

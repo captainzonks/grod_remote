@@ -39,6 +39,12 @@ class GrodApi {
   Future<void> volumeDown() => _post('/volume-down', {});
   Future<void> mute() => _post('/mute', {});
   Future<void> unmute() => _post('/unmute', {});
+
+  /// Set absolute volume level in [0.0, 1.0]. Backed by the daemon's
+  /// `POST /volume {level}` (grod >= 0.4.0 / grod_tv >= 0.1.3); the daemon
+  /// clamps out-of-range values. Lets the remote render a Spotify-style
+  /// absolute slider instead of stepping with volume-up/down.
+  Future<void> setVolume(double level) => _post('/volume', {'level': level});
   Future<void> forward([int seconds = 10]) => _post('/forward', {'seconds': seconds});
   Future<void> back([int seconds = 10]) => _post('/back', {'seconds': seconds});
   Future<void> removeFromQueue(int pos) async {
