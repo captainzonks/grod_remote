@@ -60,28 +60,33 @@ class HomeScreen extends StatelessWidget {
       ),
       body: !state.configured
           ? _notConfigured(context)
-          : RefreshIndicator(
-              onRefresh: state.refresh,
-              child: ListView(
-                padding: const EdgeInsets.all(12),
-                children: [
-                  _NowPlayingCard(state: state),
-                  const SizedBox(height: 12),
-                  _PlaybackControls(state: state),
-                  const SizedBox(height: 16),
-                  _QueueList(state: state),
-                  // Padding so FAB doesn't overlap the last queue item.
-                  const SizedBox(height: 80),
-                ],
-              ),
+          : Column(
+              children: [
+                // Scrollable content: now-playing card + queue. Takes all the
+                // space above the fixed bottom control bar so the transport
+                // controls stay reachable by thumb regardless of queue length.
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: state.refresh,
+                    child: ListView(
+                      padding: const EdgeInsets.all(12),
+                      children: [
+                        _NowPlayingCard(state: state),
+                        const SizedBox(height: 12),
+                        _QueueList(state: state),
+                      ],
+                    ),
+                  ),
+                ),
+                // Fixed bottom bar in the thumb zone: transport row, then a
+                // Cast-URL / volume action row (Spotify-style, URL left and
+                // volume right).
+                _BottomControlBar(
+                  state: state,
+                  onCastUrl: () => _openCastUrlSheet(context),
+                ),
+              ],
             ),
-      floatingActionButton: state.configured
-          ? FloatingActionButton.extended(
-              onPressed: () => _openCastUrlSheet(context),
-              icon: const Icon(Icons.add_link),
-              label: const Text('Cast URL'),
-            )
-          : null,
     );
   }
 
@@ -377,61 +382,202 @@ class _ErrorBanner extends StatelessWidget {
   }
 }
 
-class _PlaybackControls extends StatelessWidget {
+/// Fixed bottom control bar: a transport row (seek / play-pause / skip) above
+/// an action row with Cast URL on the left and a Spotify-style volume control
+/// on the right. Lives in the thumb zone at the bottom of the home screen.
+class _BottomControlBar extends StatelessWidget {
   final AppState state;
-  const _PlaybackControls({required this.state});
+  final VoidCallback onCastUrl;
+  const _BottomControlBar({required this.state, required this.onCastUrl});
 
   void _act(BuildContext ctx, Future<void> Function(dynamic) fn) =>
       ctx.read<AppState>().act(fn);
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final isPlaying = state.status?.state == DeviceState.playing;
 
-    return Card(
+    return Material(
+      // Slight elevation tint separates the bar from the scrolling content
+      // above without a hard divider line.
+      color: cs.surfaceContainer,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Transport row — the primary controls, centered and large for
+              // thumb reach.
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.replay_10),
+                    iconSize: 28,
+                    onPressed: () => _act(context, (a) => a.back()),
+                  ),
+                  IconButton.filledTonal(
+                    icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
+                    iconSize: 36,
+                    onPressed: () => _act(context, (a) => a.playPause()),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.forward_10),
+                    iconSize: 28,
+                    onPressed: () => _act(context, (a) => a.forward()),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.skip_next),
+                    iconSize: 28,
+                    onPressed: () => _act(context, (a) => a.skip()),
+                  ),
+                ],
+              ),
+              // Action row — Cast URL left, volume right (Spotify device /
+              // volume placement).
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.add_link),
+                    tooltip: 'Cast URL',
+                    onPressed: onCastUrl,
+                  ),
+                  _VolumeButton(state: state),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Spotify-style volume control: an icon button that opens a popup with a
+/// vertical slider. Reads the daemon's reported level and writes absolute
+/// values back via `AppState.setVolume`.
+class _VolumeButton extends StatelessWidget {
+  final AppState state;
+  const _VolumeButton({required this.state});
+
+  IconData _iconFor(double v, bool muted) {
+    if (muted || v <= 0.0) return Icons.volume_off;
+    if (v < 0.5) return Icons.volume_down;
+    return Icons.volume_up;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final vol = state.displayVolume;
+    final muted = state.status?.muted ?? false;
+    return IconButton(
+      icon: Icon(_iconFor(vol, muted)),
+      tooltip: 'Volume',
+      onPressed: () => _openVolumeSheet(context),
+    );
+  }
+
+  void _openVolumeSheet(BuildContext context) {
+    final appState = context.read<AppState>();
+    // Android-OS-style volume popup: a thin pill floating against the right
+    // edge, dismissed by tapping the transparent barrier. showGeneralDialog
+    // (not showDialog) lets us place the panel ourselves and skip the default
+    // centered Material dialog chrome.
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss volume',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 150),
+      pageBuilder: (dialogCtx, anim, secondaryAnim) =>
+          ChangeNotifierProvider.value(
+        value: appState,
+        child: const _VolumePanel(),
+      ),
+      transitionBuilder: (transCtx, anim, secondaryAnim, child) {
+        // Slide in from the right edge, matching the anchor side.
+        final slide = Tween<Offset>(
+          begin: const Offset(0.3, 0),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut));
+        return FadeTransition(
+          opacity: anim,
+          child: SlideTransition(position: slide, child: child),
+        );
+      },
+    );
+  }
+}
+
+/// Android-OS-style volume panel: a thin rounded card anchored to the right
+/// edge, vertically centered, holding a vertical slider with the volume icon
+/// at the bottom. Watches AppState so the slider tracks the daemon's reported
+/// level (and the optimistic value while a drag settles).
+class _VolumePanel extends StatelessWidget {
+  const _VolumePanel();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    final cs = Theme.of(context).colorScheme;
+    final vol = state.displayVolume;
+    final muted = state.status?.muted ?? false;
+
+    return Align(
+      alignment: Alignment.centerRight,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.replay_10),
-                  onPressed: () => _act(context, (a) => a.back()),
-                ),
-                IconButton(
-                  icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow, size: 36),
-                  onPressed: () => _act(context, (a) => a.playPause()),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.forward_10),
-                  onPressed: () => _act(context, (a) => a.forward()),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.skip_next),
-                  onPressed: () => _act(context, (a) => a.skip()),
-                ),
-              ],
+        padding: const EdgeInsets.only(right: 12),
+        // Fixed pill width. Without this, the rotated Slider reports an
+        // unbounded cross-axis and the Material card stretches edge-to-edge.
+        // 56 matches the OS volume-pill footprint and gives the thumb room.
+        child: SizedBox(
+          width: 56,
+          child: Material(
+            color: cs.surfaceContainerHigh,
+            elevation: 3,
+            borderRadius: BorderRadius.circular(28),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Vertical slider via RotatedBox — Flutter has no native
+                  // vertical Slider, but rotating keeps gestures + a11y intact.
+                  // SliderTheme thins the track to match the OS pill look.
+                  SizedBox(
+                    height: 200,
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 6,
+                        overlayShape:
+                            const RoundSliderOverlayShape(overlayRadius: 16),
+                      ),
+                      child: RotatedBox(
+                        quarterTurns: 3,
+                        child: Slider(
+                          value: vol.clamp(0.0, 1.0),
+                          onChanged: (v) =>
+                              context.read<AppState>().setVolume(v),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Icon(
+                    muted || vol <= 0.0
+                        ? Icons.volume_off
+                        : (vol < 0.5 ? Icons.volume_down : Icons.volume_up),
+                    size: 20,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ],
+              ),
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.volume_down),
-                  onPressed: () => _act(context, (a) => a.volumeDown()),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.volume_mute),
-                  onPressed: () => _act(context, (a) => a.mute()),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.volume_up),
-                  onPressed: () => _act(context, (a) => a.volumeUp()),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );

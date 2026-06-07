@@ -38,6 +38,12 @@ class Status {
   /// Daemon's configured Piped API URL. Nullable so older daemons that
   /// predate the field still parse.
   final String? pipedUrl;
+  /// Current device volume in [0.0, 1.0]. Null when the daemon is unreachable
+  /// or predates the field (grod < 0.4.0 / grod_tv < 0.1.3) — the slider falls
+  /// back to a neutral position in that case.
+  final double? volume;
+  /// Whether the device is muted. Null for the same reasons as [volume].
+  final bool? muted;
 
   const Status({
     required this.state,
@@ -48,6 +54,8 @@ class Status {
     this.position,
     this.duration,
     this.pipedUrl,
+    this.volume,
+    this.muted,
   });
 
   factory Status.fromJson(Map<String, dynamic> j) => Status(
@@ -68,6 +76,8 @@ class Status {
         position: (j['position'] as num?)?.toInt(),
         duration: (j['duration'] as num?)?.toInt(),
         pipedUrl: j['piped_url'] as String?,
+        volume: (j['volume'] as num?)?.toDouble(),
+        muted: j['muted'] as bool?,
       );
 }
 
@@ -85,7 +95,21 @@ String formatSeconds(int s) {
 }
 
 /// Allowed cast quality values. Order is display order in dropdowns.
-const List<String> kQualityOptions = ['best', '1080p', '720p', '480p', '360p'];
+///
+/// 2160p (4K) and 1440p are served by YouTube only as VP9/AV1. The grod_tv
+/// (Android TV / ExoPlayer) daemon decodes those natively, so the tiers work
+/// there. The go-chromecast HLS daemon (grod) transcodes to H.264 and still
+/// caps at 1080p — selecting 4K against it falls back to the highest H.264
+/// stream it can mux.
+const List<String> kQualityOptions = [
+  'best',
+  '2160p',
+  '1440p',
+  '1080p',
+  '720p',
+  '480p',
+  '360p',
+];
 
 /// Public Piped instances we ship as presets. Updated periodically from
 /// the upstream Piped frontend; the user can always type a custom URL
